@@ -246,12 +246,12 @@ select option{background:var(--hull)}
 <!-- Firebase config injectée au déploiement — ne jamais mettre les clés ici -->
 <script>
   window.__ENV__ = {
-    FIREBASE_API_KEY:             "%%FIREBASE_API_KEY%%",
-    FIREBASE_AUTH_DOMAIN:         "%%FIREBASE_AUTH_DOMAIN%%",
-    FIREBASE_PROJECT_ID:          "%%FIREBASE_PROJECT_ID%%",
-    FIREBASE_STORAGE_BUCKET:      "%%FIREBASE_STORAGE_BUCKET%%",
-    FIREBASE_MESSAGING_SENDER_ID: "%%FIREBASE_MESSAGING_SENDER_ID%%",
-    FIREBASE_APP_ID:              "%%FIREBASE_APP_ID%%"
+    FIREBASE_API_KEY:             "AIzaSyBqrhteGQUfOz8YjIhcNwrzgIkChq7HlvE",
+    FIREBASE_AUTH_DOMAIN:         "jeune-entrainement.firebaseapp.com",
+    FIREBASE_PROJECT_ID:          "jeune-entrainement",
+    FIREBASE_STORAGE_BUCKET:      "jeune-entrainement.firebasestorage.app",
+    FIREBASE_MESSAGING_SENDER_ID: "588281323716",
+    FIREBASE_APP_ID:              "1:588281323716:web:df6edb41921ea321082991"
   };
 </script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -259,8 +259,6 @@ select option{background:var(--hull)}
 <script>
 firebase.initializeApp({apiKey:window.__ENV__.FIREBASE_API_KEY,authDomain:window.__ENV__.FIREBASE_AUTH_DOMAIN,projectId:window.__ENV__.FIREBASE_PROJECT_ID,storageBucket:window.__ENV__.FIREBASE_STORAGE_BUCKET,messagingSenderId:window.__ENV__.FIREBASE_MESSAGING_SENDER_ID,appId:window.__ENV__.FIREBASE_APP_ID});
 var db=firebase.firestore();
- 
-
  
 var rowers=[],sessions=[],att={},boats=[],catP="Tous",catR="Tous";
 var CATS=["U13","U15","U17","U19","U23"],MAXBOATS=20;
@@ -306,6 +304,7 @@ function defAbsent(){rowers.forEach(function(r){if(att[r.id]===undefined)att[r.i
  
 document.getElementById("sDate").value=today();
 ld(true);setSt("Connexion...");
+var _ldTimeout=setTimeout(function(){ld(false);setSt("");},8000);
  
 db.collection("rcnsm_sessions").orderBy("date","desc").onSnapshot(function(snap){
   sessions=snap.docs.map(function(d){return Object.assign({id:d.id},d.data());});
@@ -313,9 +312,10 @@ db.collection("rcnsm_sessions").orderBy("date","desc").onSnapshot(function(snap)
 },function(e){console.warn(e);});
 
 db.collection("rcnsm_rowers").orderBy("name").onSnapshot(function(snap){
+  clearTimeout(_ldTimeout);
   rowers=snap.docs.map(function(d){return Object.assign({id:d.id},d.data());});
   defAbsent();buildTabs();renderAtt();renderRowers();ld(false);setSt("");
-},function(e){flash("Erreur Firebase: "+e.message);ld(false);});
+},function(e){clearTimeout(_ldTimeout);flash("Erreur Firebase: "+e.message);ld(false);setSt("");});
 
 
  
