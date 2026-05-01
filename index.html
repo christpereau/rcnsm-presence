@@ -330,22 +330,16 @@ function defAbsent(){rowers.forEach(function(r){if(att[r.id]===undefined)att[r.i
 document.getElementById("sDate").value=today();
 ld(true);setSt("Connexion...");
  
-// RCNSM rowers — données statiques
-rowers=[
-  {id:"s01",name:"Célyan Thibaux",cat:"U17",lic:"09.26.502",genre:"M"},
-  {id:"s02",name:"Juliette Lucas",cat:"U17",lic:"09.26.501",genre:"W"},
-  {id:"s03",name:"Anselm Brunke",cat:"U17",lic:"09.26.507",genre:"M"},
-  {id:"s04",name:"Dejan Granozio",cat:"U17",lic:"10.26.512",genre:"M"},
-  {id:"s05",name:"Marguerite Defalque",cat:"U17",lic:"10.26.501",genre:"W"},
-  {id:"s06",name:"Félicie Moons",cat:"U17",lic:"10.26.503",genre:"W"}
-];
-defAbsent();buildTabs();renderAtt();renderRowers();ld(false);setSt("");
- 
 db.collection("rcnsm_sessions").orderBy("date","desc").onSnapshot(function(snap){
   sessions=snap.docs.map(function(d){return Object.assign({id:d.id},d.data());});
   renderHist();renderStats();
 },function(e){console.warn(e);});
- 
+
+db.collection("rcnsm_rowers").orderBy("name").onSnapshot(function(snap){
+  rowers=snap.docs.map(function(d){return Object.assign({id:d.id},d.data());});
+  defAbsent();buildTabs();renderAtt();renderRowers();ld(false);setSt("");
+},function(e){flash("Erreur Firebase: "+e.message);ld(false);});
+
 db.collection("rcnsm_rowers").get().then(function(snap){
   if(snap.empty){
     setSt("Import...");
@@ -373,16 +367,21 @@ function updateCatPreview(){
 function addRower(){
   var name=document.getElementById("nNom").value.trim();
   if(!name)return flash("Entrez un nom.");
-  var cat="";
+  var birthVal=document.getElementById("nBirth").value.trim();
+  var by=parseInt(birthVal)||0;
+  var cat=(by>=2000&&by<=2020)?catFromBirth(by):"";
+  if(!cat)return flash("Entrez une année de naissance valide (2000-2020).");
   ld(true);
-  db.collection("rcnsm_rowers").doc("r"+Date.now()).set({name:name,licence:document.getElementById("nLic").value.trim(),cat:cat})
-    .then(function(){document.getElementById("nNom").value="";document.getElementById("nLic").value="";document.getElementById("nCat").value="";ld(false);})
+  db.collection("rcnsm_rowers").doc("r"+Date.now()).set({name:name,licence:document.getElementById("nLic").value.trim(),cat:cat,birthYear:by})
+    .then(function(){document.getElementById("nNom").value="";document.getElementById("nLic").value="";document.getElementById("nBirth").value="";document.getElementById("catPreview").textContent="";ld(false);flash("Rameur ajouté.","ok");})
     .catch(function(e){flash("Erreur: "+e.message);ld(false);});
 }
 function removeRower(id){
   if(!confirm("Retirer ce rameur ?"))return;
   ld(true);
-  db.collection("rcnsm_rowers").doc(id).delete().then(function(){delete att[id];ld(false);}).catch(function(e){flash("Erreur: "+e.message);ld(false);});
+  db.collection("rcnsm_rowers").doc(id).delete()
+    .then(function(){delete att[id];ld(false);flash("Rameur retiré.","ok");})
+    .catch(function(e){flash("Erreur: "+e.message);ld(false);});
 }
 function renderRowers(){
   var el=document.getElementById("rList");if(!el)return;
