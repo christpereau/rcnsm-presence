@@ -243,10 +243,21 @@ select option{background:var(--hull)}
   </div>
 </div>
  
+<!-- Firebase config injectée au déploiement — ne jamais mettre les clés ici -->
+<script>
+  window.__ENV__ = {
+    FIREBASE_API_KEY:             "%%FIREBASE_API_KEY%%",
+    FIREBASE_AUTH_DOMAIN:         "%%FIREBASE_AUTH_DOMAIN%%",
+    FIREBASE_PROJECT_ID:          "%%FIREBASE_PROJECT_ID%%",
+    FIREBASE_STORAGE_BUCKET:      "%%FIREBASE_STORAGE_BUCKET%%",
+    FIREBASE_MESSAGING_SENDER_ID: "%%FIREBASE_MESSAGING_SENDER_ID%%",
+    FIREBASE_APP_ID:              "%%FIREBASE_APP_ID%%"
+  };
+</script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script>
-firebase.initializeApp({apiKey:"AIzaSyBqrhteGQUfOz8YjIhcNwrzgIkChq7HlvE",authDomain:"jeune-entrainement.firebaseapp.com",projectId:"jeune-entrainement",storageBucket:"jeune-entrainement.firebasestorage.app",messagingSenderId:"588281323716",appId:"1:588281323716:web:df6edb41921ea321082991"});
+firebase.initializeApp({apiKey:window.__ENV__.FIREBASE_API_KEY,authDomain:window.__ENV__.FIREBASE_AUTH_DOMAIN,projectId:window.__ENV__.FIREBASE_PROJECT_ID,storageBucket:window.__ENV__.FIREBASE_STORAGE_BUCKET,messagingSenderId:window.__ENV__.FIREBASE_MESSAGING_SENDER_ID,appId:window.__ENV__.FIREBASE_APP_ID});
 var db=firebase.firestore();
  
 var SEED=[
@@ -392,21 +403,88 @@ function importCSV(input){
   if(!input.files[0])return;
   var reader=new FileReader();
   reader.onload=function(e){
-    var lines=e.target.result.split("\n"),AL=["U13","U15","U17","U19","U23"],added=0,dup=0;
+    var raw=e.target.result;
+    // Détecte le séparateur (;  ou ,)
+    var sep=raw.indexOf(";")>-1?";":",";
+    // (auto-detect separator)
+    var lines=raw.split(/\r?\n/);
+    var AL=["U13","U15","U17","U19","U23"],added=0,dup=0,ignored=0;
     var ex=new Set(rowers.map(function(r){return r.name.toLowerCase();}));
     var batch=db.batch();
-    lines.forEach(function(line){
-      var cols=line.split(";");if(cols.length<22)return;
-      var nom=(cols[1]||"").trim(),prenom=(cols[2]||"").trim(),lic=(cols[13]||"").trim(),cat=(cols[21]||"").trim().toUpperCase();
-      if(!nom||!prenom||AL.indexOf(cat)<0)return;
-      var fn=prenom+" "+nom;
+    // Analyse la 1ère ligne non-vide pour détecter le format
+    var header=null;
+    for(var hi=0;hi<lines.length;hi++){if(lines[hi].trim()){{header=lines[hi].split(sep);break;}}}
+    // Cherche les colonnes utiles par nom ou position
+    function findCol(hdrs,names){
+      for(var i=0;i<hdrs.length;i++){
+        var h=hdrs[i].trim().toLowerCase().replace(/['"]/g,"");
+        for(var j=0;j<names.length;j++){if(h.indexOf(names[j])>-1)return i;}
+      }
+      return -1;
+    }
+    var hasHeader=header&&isNaN(parseInt(header[0]));
+    var nomCol=-1,prenomCol=-1,licCol=-1,catCol=-1,birthCol=-1;
+    if(hasHeader){
+      nomCol=findCol(header,["nom","name","last"]);
+      prenomCol=findCol(header,["prenom","prénom","first"]);
+      licCol=findCol(header,["licence","lic","license"]);
+      catCol=findCol(header,["cat","categorie","catégorie"]);
+      birthCol=findCol(header,["naissance","birth","born","ddn","année"]);
+    }
+    // Fallback : format FRBA classique (nom=col1, prenom=col2, lic=col13, cat=col21)
+    var frbaFormat=(nomCol<0&&prenomCol<0);
+    var startLine=hasHeader?1:0;
+    lines.slice(startLine).forEach(function(line){
+      if(!line.trim())return;
+      var cols=line.split(sep);
+      var nom,prenom,lic,cat,rawDate;
+      if(!frbaFormat){
+        nom=nomCol>=0?(cols[nomCol]||"").trim().replace(/['"]/g,""):"";
+        prenom=prenomCol>=0?(cols[prenomCol]||"").trim().replace(/['"]/g,""):"";
+        lic=licCol>=0?(cols[licCol]||"").trim().replace(/['"]/g,""):"";
+        cat=catCol>=0?(cols[catCol]||"").trim().toUpperCase().replace(/['"]/g,""):"";
+        rawDate=birthCol>=0?(cols[birthCol]||"").trim():"";
+      } else {
+        // Format FRBA : longueur min 22 cols
+        if(cols.length<3)return;
+        nom=(cols[1]||"").trim();
+        prenom=(cols[2]||"").trim();
+        lic=cols.length>=14?(cols[13]||"").trim():"";
+        cat=cols.length>=22?(cols[21]||"").trim().toUpperCase():"";
+        rawDate=(cols[3]||"").trim();
+      }
+      if(!nom&&!prenom){ignored++;return;}
+      // Construit le nom complet
+      var fn=prenom?prenom+" "+nom:nom;
+      fn=fn.trim();
+      if(!fn){ignored++;return;}
       if(ex.has(fn.toLowerCase())){dup++;return;}
-      batch.set(db.collection("rcnsm_rowers").doc("r"+Date.now()+Math.random().toString(36).slice(2,5)),{name:fn,licence:lic||"",cat:cat});
+      // Extrait l'année de naissance
+      var byMatch=rawDate.match(/(\d{4})/);
+      var by=byMatch?parseInt(byMatch[1]):0;
+      // Valide cat ou calcule depuis l'année
+      var finalCat=(by>=2000&&by<=2020)?catFromBirth(by):(AL.indexOf(cat)>=0?cat:"");
+      if(!finalCat){ignored++;return;}
+      batch.set(db.collection("rcnsm_rowers").doc("r"+Date.now()+Math.random().toString(36).slice(2,5)),{
+        name:fn,licence:lic||"",cat:finalCat,
+        birthYear:(by>=2000&&by<=2020)?by:null
+      });
       ex.add(fn.toLowerCase());added++;
     });
-    batch.commit().then(function(){document.getElementById("importMsg").textContent=added+" importe(s), "+dup+" doublon(s).";input.value="";});
+    if(added>0){
+      batch.commit()
+        .then(function(){
+          document.getElementById("importMsg").textContent="✓ "+added+" importé(s)"+(dup?" · "+dup+" doublon(s)":"")+(ignored?" · "+ignored+" ignoré(s)":"");
+          input.value="";
+        })
+        .catch(function(err){document.getElementById("importMsg").textContent="Erreur Firebase: "+err.message;});
+    } else {
+      document.getElementById("importMsg").textContent="Aucun rameur importé."+(dup?" "+dup+" doublon(s).":"")+" Vérifiez le format de votre CSV.";
+    }
   };
-  reader.readAsText(input.files[0],"windows-1252");
+  // Essaie UTF-8 d'abord, fallback windows-1252 (format FRBA)
+  try{reader.readAsText(input.files[0],"utf-8");}
+  catch(e){reader.readAsText(input.files[0],"windows-1252");}
 }
  
 function getRB(rid){for(var i=0;i<boats.length;i++){if(boats[i].crew.indexOf(rid)>=0)return boats[i].name;}return null;}
