@@ -246,12 +246,12 @@ select option{background:var(--hull)}
 <!-- Firebase config injectée au déploiement — ne jamais mettre les clés ici -->
 <script>
   window.__ENV__ = {
-    FIREBASE_API_KEY:             "%%FIREBASE_API_KEY%%",
-    FIREBASE_AUTH_DOMAIN:         "%%FIREBASE_AUTH_DOMAIN%%",
-    FIREBASE_PROJECT_ID:          "%%FIREBASE_PROJECT_ID%%",
-    FIREBASE_STORAGE_BUCKET:      "%%FIREBASE_STORAGE_BUCKET%%",
-    FIREBASE_MESSAGING_SENDER_ID: "%%FIREBASE_MESSAGING_SENDER_ID%%",
-    FIREBASE_APP_ID:              "%%FIREBASE_APP_ID%%"
+    FIREBASE_API_KEY:             "AIzaSyBqrhteGQUfOz8YjIhcNwrzgIkChq7HlvE",
+    FIREBASE_AUTH_DOMAIN:         "jeune-entrainement.firebaseapp.com",
+    FIREBASE_PROJECT_ID:          "jeune-entrainement",
+    FIREBASE_STORAGE_BUCKET:      "jeune-entrainement.firebasestorage.app",
+    FIREBASE_MESSAGING_SENDER_ID: "588281323716",
+    FIREBASE_APP_ID:              "1:588281323716:web:df6edb41921ea321082991"
   };
 </script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -351,6 +351,22 @@ function removeRower(id){
   ld(true);
   db.collection("rcnsm_rowers").doc(id).delete()
     .then(function(){delete att[id];ld(false);flash("Rameur retiré.","ok");})
+    .catch(function(e){flash("Erreur: "+e.message);ld(false);});
+}
+function saveRower(rid){
+  var r=rowers.find(function(x){return x.id===rid;});
+  if(!r)return flash("Rameur introuvable.");
+  var newName=(document.getElementById("eNom_"+rid)||{}).value;
+  var newLic=(document.getElementById("eLic_"+rid)||{}).value;
+  var newBirthRaw=(document.getElementById("eBirth_"+rid)||{}).value;
+  if(!newName)return flash("Le nom ne peut pas être vide.");
+  newName=newName.trim();newLic=(newLic||"").trim();
+  var newBirth=parseInt(newBirthRaw)||0;
+  if(!newBirth||newBirth<2000||newBirth>2020)return flash("Année de naissance invalide (2000-2020).");
+  var newCat=catFromBirth(newBirth);
+  ld(true);
+  db.collection("rcnsm_rowers").doc(rid).update({name:newName,licence:newLic,birthYear:newBirth,cat:newCat})
+    .then(function(){ld(false);flash("Rameur mis à jour.","ok");document.getElementById("mbg").classList.remove("open");})
     .catch(function(e){flash("Erreur: "+e.message);ld(false);});
 }
 function renderRowers(){
